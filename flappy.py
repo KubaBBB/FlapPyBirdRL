@@ -6,7 +6,11 @@ import pygame
 from pygame.locals import *
 from assets import get_assets
 
-FPS = 30
+from json import load
+from ast import literal_eval
+import QBot
+
+FPS = 60
 SCREENWIDTH = 288
 SCREENHEIGHT = 512
 PIPE_GAP_SIZE = 100  # gap between upper and lower part of pipe
@@ -15,7 +19,7 @@ IMAGES, SOUNDS, HIT_MASKS = {}, {}, {}
 
 
 def main():
-    global SCREEN, FPS_CLOCK, IMAGES, SOUNDS, HIT_MASKS
+    global SCREEN, FPS_CLOCK, IMAGES, SOUNDS, HIT_MASKS, Q, QBOT
     pygame.init()
     FPS_CLOCK = pygame.time.Clock()
     SCREEN = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
@@ -23,6 +27,8 @@ def main():
 
     IMAGES, SOUNDS, HIT_MASKS = get_assets()
 
+    Q = read_q("q_1500_[10, 10, 10, 10, 2]")
+    QBOT = QBot.QBot(0, [10, 10, 10, 10, 2], Q)
     while True:
         movement_info = show_welcome_animation()
         crash_info = main_game(movement_info)
@@ -80,14 +86,14 @@ def main_game(movement_info):
 
     # list of upper pipes
     upper_pipes = [
-        {'x': SCREENWIDTH + 50, 'y': new_pipe1[0]['y']},
-        {'x': SCREENWIDTH + 50 + (SCREENWIDTH / 2), 'y': new_pipe2[0]['y']},
+        {'x': SCREENWIDTH - 80, 'y': new_pipe1[0]['y']},
+        {'x': SCREENWIDTH - 80 + (SCREENWIDTH / 2), 'y': new_pipe2[0]['y']},
     ]
 
     # list of lowerpipe
     lower_pipes = [
-        {'x': SCREENWIDTH + 50, 'y': new_pipe1[1]['y']},
-        {'x': SCREENWIDTH + 50 + (SCREENWIDTH / 2), 'y': new_pipe2[1]['y']},
+        {'x': SCREENWIDTH - 80, 'y': new_pipe1[1]['y']},
+        {'x': SCREENWIDTH - 80 + (SCREENWIDTH / 2), 'y': new_pipe2[1]['y']},
     ]
 
     pipe_vel_x = -4
@@ -109,9 +115,27 @@ def main_game(movement_info):
                 sys.exit()
             if event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP):
                 if player_y > -2 * IMAGES['player'][0].get_height():
-                    player_vel_y = player_flap_acc
-                    player_flapped = True
+                #    player_vel_y = player_flap_acc
+                 #   player_flapped = True
                     SOUNDS['wing'].play()
+
+        if player_y > 10 and player_vel_y > 0:
+
+            dist_x = -player_x + lower_pipes[0]["x"]
+            if dist_x > -30:
+                closest_lower_pipe = lower_pipes[0]["y"]
+                closest_upper_pipe = upper_pipes[0]["y"]
+            else:
+                closest_lower_pipe = lower_pipes[1]["y"]
+                closest_upper_pipe = upper_pipes[1]["y"]
+
+            observation = player_y, closest_lower_pipe, closest_upper_pipe, dist_x, player_vel_y
+            action = QBOT.act(observation)
+            if action != '0':
+                print("IN ACTION")
+                player_vel_y = player_flap_acc
+                player_flapped = True
+                SOUNDS['wing'].play()
 
         # check for crash here
         crash_test = check_crash({'x': player_x, 'y': player_y, 'index': player_index},
@@ -277,7 +301,7 @@ def get_random_pipe():
 
     return [
         {'x': pipe_x, 'y': gap_y - pipe_height},  # upper pipe
-        {'x': pipe_x, 'y': gap_y + PIPE_GAP_SIZE + random.randrange(-15, 15)}  # lower pipe
+        {'x': pipe_x, 'y': gap_y + PIPE_GAP_SIZE + random.randrange(45, 95)}  # lower pipe
     ]
 
 
@@ -346,6 +370,12 @@ def pixel_collision(rect1, rect2, hitmask1, hitmask2):
             if hitmask1[x1 + x][y1 + y] and hitmask2[x2 + x][y2 + y]:
                 return True
     return False
+
+
+def read_q(filename):
+    with open(f'trained_q/{filename}.json', 'r') as f: obj = load(f)
+
+    return {literal_eval(k): v for k, v in obj.items()}
 
 
 if __name__ == '__main__':

@@ -38,14 +38,14 @@ class Environment(object):
 
         # list of upper pipes
         self.upper_pipes = [
-            {"x": SCREENWIDTH + 50, "y": new_pipe1[0]["y"]},
-            {"x": SCREENWIDTH + 50 + (SCREENWIDTH / 2), "y": new_pipe2[0]["y"]},
+            {"x": SCREENWIDTH - 80, "y": new_pipe1[0]["y"]},
+            {"x": SCREENWIDTH - 80 + (SCREENWIDTH / 2), "y": new_pipe2[0]["y"]},
         ]
 
         # list of lowerpipe
         self.lower_pipes = [
-            {"x": SCREENWIDTH + 50, "y": new_pipe1[1]["y"]},
-            {"x": SCREENWIDTH + 50 + (SCREENWIDTH / 2), "y": new_pipe2[1]["y"]},
+            {"x": SCREENWIDTH - 80, "y": new_pipe1[1]["y"]},
+            {"x": SCREENWIDTH - 80 + (SCREENWIDTH / 2), "y": new_pipe2[1]["y"]},
         ]
 
         self.pipe_vel_x = -4
@@ -58,7 +58,6 @@ class Environment(object):
         self.player_flap_acc = -9  # players speed on flapping
         self.player_flapped = False  # True when player flaps
 
-        crash_test = [False, False]
         dist_x = -self.player_x + self.lower_pipes[0]["x"]
 
         observation = self.player_y, self.lower_pipes[0]["y"], self.upper_pipes[0]["y"], dist_x, self.player_vel_y
@@ -69,7 +68,6 @@ class Environment(object):
         self.reset_environment()
 
     def step(self, action):
-        self.score += 0.5
         dist_x = -self.player_x + self.lower_pipes[0]["x"]
         if dist_x > -30:
             closest_lower_pipe = self.lower_pipes[0]["y"]
@@ -78,10 +76,14 @@ class Environment(object):
             closest_lower_pipe = self.lower_pipes[1]["y"]
             closest_upper_pipe = self.upper_pipes[1]["y"]
 
+        need_refactor = 0
+
         if action:
-            if self.player_y > 10:
+            if self.player_y > 10 and self.player_vel_y > 0:
                 self.player_vel_y = self.player_flap_acc
                 self.player_flapped = True
+            else:
+                need_refactor = 1
 
         # check for crash here
         crash_test = self.check_crash({'x': self.player_x, 'y': self.player_y}, self.upper_pipes, self.lower_pipes)
@@ -89,14 +91,16 @@ class Environment(object):
         if crash_test[0]:
             observation = self.player_y, closest_lower_pipe, closest_upper_pipe, dist_x, self.player_vel_y
 
-            return observation, self.score, crash_test
+            if crash_test[1] or crash_test[2]:
+                self.score -= 10
+            return observation, self.score, crash_test, need_refactor
 
         # check for score
         player_mid_pos = self.player_x + PLAYER[IM_WIDTH] / 2
         for pipe in self.upper_pipes:
             pipe_mid_pos = pipe['x'] + PIPE[IM_WIDTH] / 2
             if pipe_mid_pos <= player_mid_pos < pipe_mid_pos + 4:
-                self.score += 100
+                self.score += 1
 
         # player's movement
         if self.player_vel_y < self.player_max_vel_y and not self.player_flapped:
@@ -132,7 +136,7 @@ class Environment(object):
 
         observation = self.player_y, closest_lower_pipe, closest_upper_pipe, dist_x, self.player_vel_y
 
-        return observation, self.score, crash_test
+        return observation, self.score, crash_test, need_refactor
 
     def sample(self):
         return random.randint(0, 1)
@@ -143,7 +147,7 @@ class Environment(object):
 
         # if player crashes into ground
         if player['y'] + player['h'] >= BASE_Y - 1:
-            return [True, True]
+            return [True, True, False]
         else:
 
             player_rect = pygame.Rect(player['x'], player['y'], player['w'], player['h'])
@@ -165,9 +169,9 @@ class Environment(object):
                 l_collide = self.pixel_collision(player_rect, l_pipe_rect, p_hit_mask, l_hit_mask)
 
                 if u_collide or l_collide:
-                    return [True, False]
+                    return [True, False, u_collide]
 
-        return [False, False]
+        return [False, False, False]
 
     def player_shm(self, player_shm):
         """oscillates the value of playerShm['val'] between 8 and -8"""
@@ -189,7 +193,7 @@ class Environment(object):
 
         return [
             {'x': pipe_x, 'y': gap_y - pipe_height},  # upper pipe
-            {'x': pipe_x, 'y': gap_y + PIPE_GAP_SIZE + random.randrange(-15, 15)}  # lower pipe
+            {'x': pipe_x, 'y': gap_y + PIPE_GAP_SIZE + random.randrange(45, 95)}  # lower pipe
         ]
 
     def pixel_collision(self, rect1, rect2, hitmask1, hitmask2):
